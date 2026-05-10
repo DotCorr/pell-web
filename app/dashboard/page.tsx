@@ -7,26 +7,46 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5001";
 const CODE = {
   typescript: `import { Pell } from 'pellcrypto'
 
-const pell = new Pell(process.env.PELL_KEY)
-const { pk, sk } = await pell.keygen()
-const { ct, ss } = await pell.encapsulate(pk)
-const ss2 = await pell.decapsulate(sk, ct)
-// ss === ss2 ✓`,
-  python: `from pellcrypto import Pell
+const pell = new Pell({ apiKey: process.env.PELL_KEY! })
 
-pell = Pell(os.environ["PELL_KEY"])
-pk, sk = pell.keygen()
-ct, ss = pell.encapsulate(pk)
-ss2 = pell.decapsulate(sk, ct)
-# ss == ss2 ✓`,
-  curl: `# Generate a keypair
+// Alice generates a keypair
+const { pk, sk_full } = await pell.keygen()
+
+// Bob encapsulates a shared secret to Alice's pk
+const { ciphertext, shared_secret: ss_bob } = await pell.encapsulate(pk)
+
+// Alice decapsulates — shared_secret matches Bob's
+const { shared_secret: ss_alice } = await pell.decapsulate(sk_full, ciphertext)
+
+console.log(ss_bob === ss_alice) // true — quantum-safe channel established`,
+  python: `from pell_cubic.cca import keygen, encapsulate, decapsulate
+from pell_cubic.params import PELL_MLWE_512
+
+params = PELL_MLWE_512
+pk, sk_full = keygen(params)
+
+# Bob encapsulates
+ciphertext, ss_bob = encapsulate(pk, params)
+
+# Alice decapsulates
+ss_alice = decapsulate(sk_full, ciphertext, params)
+
+assert ss_bob == ss_alice  # True — IND-CCA2 secure`,
+  curl: `# 1. Generate a keypair
 curl -X POST https://api.pellcrypto.com/v1/keygen \\
-  -H "X-Pell-Key: $PELL_KEY"
+  -H "X-Pell-Key: $PELL_KEY" | jq .
 
-# Encapsulate
+# 2. Encapsulate (replace <pk> with output above)
 curl -X POST https://api.pellcrypto.com/v1/encapsulate \\
   -H "X-Pell-Key: $PELL_KEY" \\
-  -d '{"pk": <public_key>}'`,
+  -H "Content-Type: application/json" \\
+  -d '{"pk": <pk>}' | jq .shared_secret
+
+# 3. Decapsulate
+curl -X POST https://api.pellcrypto.com/v1/decapsulate \\
+  -H "X-Pell-Key: $PELL_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"sk_full": <sk_full>, "ciphertext": <ciphertext>}' | jq .shared_secret`,
 };
 
 export default function Dashboard() {
