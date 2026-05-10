@@ -100,6 +100,10 @@ export default function Home() {
                 {l}
               </a>
             ))}
+            <Link href="/playground" className="px-3 py-1.5 hover:text-white transition-colors flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 bg-green-400" />
+              Playground
+            </Link>
           </nav>
           <Link href="/dashboard" className="text-xs font-mono px-4 py-2 bg-white text-[#050505] hover:bg-white/90 transition-colors">
             get api key →

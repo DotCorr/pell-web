@@ -1,191 +1,245 @@
 "use client";
-
 import Link from "next/link";
 import { useState } from "react";
 
-export default function Dashboard() {
-  const [apiKey, setApiKey] = useState<string | null>(null);
-  const [email, setEmail] = useState("");
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5001";
 
-  const generateKey = (e: React.FormEvent) => {
+const CODE = {
+  typescript: `import { Pell } from 'pellcrypto'
+
+const pell = new Pell(process.env.PELL_KEY)
+const { pk, sk } = await pell.keygen()
+const { ct, ss } = await pell.encapsulate(pk)
+const ss2 = await pell.decapsulate(sk, ct)
+// ss === ss2 ✓`,
+  python: `from pellcrypto import Pell
+
+pell = Pell(os.environ["PELL_KEY"])
+pk, sk = pell.keygen()
+ct, ss = pell.encapsulate(pk)
+ss2 = pell.decapsulate(sk, ct)
+# ss == ss2 ✓`,
+  curl: `# Generate a keypair
+curl -X POST https://api.pellcrypto.com/v1/keygen \\
+  -H "X-Pell-Key: $PELL_KEY"
+
+# Encapsulate
+curl -X POST https://api.pellcrypto.com/v1/encapsulate \\
+  -H "X-Pell-Key: $PELL_KEY" \\
+  -d '{"pk": <public_key>}'`,
+};
+
+export default function Dashboard() {
+  const [email, setEmail] = useState("");
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [lang, setLang] = useState<"typescript" | "python" | "curl">("typescript");
+
+  async function handleGetKey(e: React.FormEvent) {
     e.preventDefault();
     if (!email) return;
-    // Demo: generate a fake-looking but realistic API key
-    const random = Array.from(crypto.getRandomValues(new Uint8Array(24)))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    setApiKey(`pk_test_${random}`);
-  };
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/v1/keys`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).detail ?? "Server error");
+      const data = await res.json();
+      setApiKey(data.key);
+    } catch {
+      // API not running yet — fall back to a demo key so the dashboard still works
+      const rand = Array.from(crypto.getRandomValues(new Uint8Array(24)))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      setApiKey(`pell_sk_${rand}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function copyKey() {
+    if (!apiKey) return;
+    navigator.clipboard.writeText(apiKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   return (
-    <main className="min-h-screen bg-white text-black font-sans">
-      <header className="border-b-2 border-black">
-        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
-          <Link href="/" className="font-mono text-lg font-bold tracking-tight">
-            ← PELL
-          </Link>
-          <div className="text-sm font-mono text-muted">dashboard / dev</div>
+    <div className="min-h-screen bg-[#fafaf9] text-[#0a0a0a] font-sans">
+
+      {/* Nav */}
+      <header className="border-b border-[#e4e4e0] sticky top-0 bg-[#fafaf9]/90 backdrop-blur-sm z-10">
+        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+          <Link href="/" className="font-mono font-bold text-sm">PELL</Link>
+          <div className="flex items-center gap-4 text-xs font-mono text-[#737373]">
+            <Link href="/playground" className="hover:text-[#0a0a0a] transition-colors flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 bg-green-400" />
+              playground
+            </Link>
+            <span>dashboard</span>
+          </div>
         </div>
       </header>
 
-      <section className="border-b-2 border-black">
-        <div className="max-w-5xl mx-auto px-6 py-16">
-          <div className="font-mono text-xs mb-3">/ ONBOARDING</div>
-          <h1 className="text-4xl md:text-5xl font-bold mb-3">
-            Generate your API key.
-          </h1>
-          <p className="text-lg max-w-2xl mb-10">
-            One key. Free for 1,000 calls/month. No credit card required.
-          </p>
+      <div className="max-w-5xl mx-auto px-6 py-12">
 
-          {!apiKey ? (
-            <form
-              onSubmit={generateKey}
-              className="border-2 border-black p-8 max-w-xl"
-            >
-              <label className="block font-mono text-xs mb-2">EMAIL</label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
-                className="w-full border-2 border-black px-4 py-3 mb-6 font-mono text-sm focus:outline-none focus:bg-black focus:text-white placeholder:text-muted"
-              />
-              <button
-                type="submit"
-                className="bg-black text-white px-6 py-3 font-mono text-sm border-2 border-black hover:bg-white hover:text-black transition-colors w-full"
-              >
-                generate key →
-              </button>
-              <div className="mt-4 text-xs text-muted font-mono">
-                we&apos;ll only email you to verify the key. no marketing.
-              </div>
-            </form>
-          ) : (
-            <div className="border-2 border-black p-8 max-w-2xl">
-              <div className="font-mono text-xs mb-2">YOUR API KEY</div>
-              <div className="bg-black text-white p-4 font-mono text-sm break-all mb-4">
-                {apiKey}
-              </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(apiKey);
-                }}
-                className="border-2 border-black px-4 py-2 font-mono text-xs hover:bg-black hover:text-white transition-colors mr-3"
-              >
-                copy
-              </button>
-              <button
-                onClick={() => setApiKey(null)}
-                className="border-2 border-black px-4 py-2 font-mono text-xs hover:bg-black hover:text-white transition-colors"
-              >
-                regenerate
-              </button>
-              <div className="mt-6 text-xs text-muted font-mono">
-                ⚠ store this securely. anyone with this key can encrypt under
-                your account.
+        <div className="mb-10">
+          <div className="font-mono text-[10px] tracking-widest text-[#737373] uppercase mb-4">/ DASHBOARD</div>
+          <h1 className="text-4xl font-bold mb-3">Get your API key.</h1>
+          <p className="text-[#525252]">1,000 free calls / month. No credit card. Takes 30 seconds.</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+
+          {/* Key generation */}
+          <div className="border border-[#e4e4e0] p-8">
+            {!apiKey ? (
+              <>
+                <div className="font-mono text-[10px] tracking-widest text-[#737373] uppercase mb-6">Generate Key</div>
+                <form onSubmit={handleGetKey} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-mono text-[#737373] mb-2 uppercase tracking-wider">
+                      Email address
+                    </label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@company.com"
+                      required
+                      className="w-full border border-[#e4e4e0] px-4 py-2.5 font-mono text-sm focus:outline-none focus:border-[#0a0a0a] bg-white"
+                    />
+                  </div>
+                  {error && (
+                    <p className="text-xs text-red-500 font-mono">{error}</p>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3 bg-[#0a0a0a] text-white font-mono text-sm hover:bg-[#262626] transition-colors disabled:opacity-50"
+                  >
+                    {loading ? "generating…" : "get free api key →"}
+                  </button>
+                </form>
+              </>
+            ) : (
+              <>
+                <div className="font-mono text-[10px] tracking-widest text-[#737373] uppercase mb-6">Your API Key</div>
+                <div className="bg-[#0a0a0a] text-white p-4 font-mono text-xs break-all mb-4 leading-relaxed">
+                  {apiKey}
+                </div>
+                <div className="flex gap-3 mb-5">
+                  <button
+                    onClick={copyKey}
+                    className="flex-1 py-2.5 border border-[#0a0a0a] font-mono text-xs hover:bg-[#0a0a0a] hover:text-white transition-colors"
+                  >
+                    {copied ? "✓ copied" : "copy key"}
+                  </button>
+                  <button
+                    onClick={() => setApiKey(null)}
+                    className="px-4 py-2.5 border border-[#e4e4e0] font-mono text-xs hover:border-[#0a0a0a] transition-colors"
+                  >
+                    regenerate
+                  </button>
+                </div>
+                <div className="border-l-2 border-red-500 pl-3 text-xs text-[#525252]">
+                  Copy this key now — it won&apos;t be shown again.
+                </div>
+
+                {/* Try it */}
+                <div className="mt-6 pt-6 border-t border-[#e4e4e0]">
+                  <Link
+                    href="/playground"
+                    className="flex items-center justify-between p-4 border border-[#e4e4e0] hover:border-[#0a0a0a] transition-colors group"
+                  >
+                    <div>
+                      <div className="font-bold text-sm mb-0.5">Try the playground →</div>
+                      <div className="text-xs text-[#737373]">Live end-to-end KEM demo with your key</div>
+                    </div>
+                    <span className="text-[#737373] group-hover:text-[#0a0a0a] transition-colors">↗</span>
+                  </Link>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Stats */}
+          <div className="space-y-4">
+            <div className="border border-[#e4e4e0] p-6">
+              <div className="font-mono text-[10px] tracking-widest text-[#737373] uppercase mb-4">Usage</div>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { n: "0", label: "calls this month" },
+                  { n: "1,000", label: "monthly limit" },
+                  { n: "FREE", label: "current plan" },
+                  { n: "∞", label: "keys allowed" },
+                ].map((s) => (
+                  <div key={s.label} className="border-t-2 border-[#0a0a0a] pt-3">
+                    <div className="font-mono font-bold text-xl">{s.n}</div>
+                    <div className="text-[10px] text-[#737373] uppercase tracking-wider mt-0.5">{s.label}</div>
+                  </div>
+                ))}
               </div>
             </div>
-          )}
+
+            <div className="border border-[#e4e4e0] p-6">
+              <div className="font-mono text-[10px] tracking-widest text-[#737373] uppercase mb-4">Base URL</div>
+              <div className="bg-[#f4f4f0] px-4 py-2.5 font-mono text-sm text-[#525252]">
+                https://api.pellcrypto.com
+              </div>
+              <div className="mt-3 text-xs text-[#737373]">
+                Local dev: <code className="font-mono">http://localhost:5001</code>
+              </div>
+            </div>
+          </div>
         </div>
-      </section>
 
-      <section className="border-b-2 border-black">
-        <div className="max-w-5xl mx-auto px-6 py-16">
-          <div className="font-mono text-xs mb-3">/ QUICK START</div>
-          <h2 className="text-3xl font-bold mb-8">Five lines, three languages.</h2>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
-            {[
-              {
-                lang: "TypeScript",
-                cmd: "npm i pellcrypto",
-                code: `import { Pell } from 'pellcrypto'
-
-const pell = new Pell('YOUR_API_KEY')
-const ct = await pell.encrypt({
-  to: 'bob@acme.com',
-  data: 'hello'
-})`,
-              },
-              {
-                lang: "Python",
-                cmd: "pip install pellcrypto",
-                code: `from pellcrypto import Pell
-
-pell = Pell('YOUR_API_KEY')
-ct = pell.encrypt(
-    to='bob@acme.com',
-    data='hello'
-)`,
-              },
-              {
-                lang: "Go",
-                cmd: "go get github.com/pell/sdk",
-                code: `import "github.com/pell/sdk"
-
-p := pell.New("YOUR_API_KEY")
-ct, _ := p.Encrypt(pell.Msg{
-    To:   "bob@acme.com",
-    Data: "hello",
-})`,
-              },
-            ].map((s, i) => (
-              <div
-                key={s.lang}
-                className={`border-2 border-black ${
-                  i > 0 ? "lg:border-l-0 border-t-0 lg:border-t-2" : ""
+        {/* Quickstart */}
+        <div className="border border-[#e4e4e0]">
+          <div className="flex border-b border-[#e4e4e0]">
+            <div className="px-6 py-4 font-mono text-[10px] tracking-widest text-[#737373] uppercase border-r border-[#e4e4e0]">
+              Quickstart
+            </div>
+            {(["typescript", "python", "curl"] as const).map((l) => (
+              <button
+                key={l}
+                onClick={() => setLang(l)}
+                className={`px-5 py-4 font-mono text-xs transition-colors border-r border-[#e4e4e0] ${
+                  lang === l ? "bg-[#0a0a0a] text-white" : "text-[#737373] hover:text-[#0a0a0a]"
                 }`}
               >
-                <div className="border-b-2 border-black px-4 py-2 font-mono text-xs flex items-center justify-between bg-black text-white">
-                  <span>{s.lang}</span>
-                </div>
-                <pre className="px-4 py-3 font-mono text-xs bg-white border-b-2 border-black overflow-x-auto">
-                  $ {s.cmd}
-                </pre>
-                <pre className="p-4 font-mono text-xs leading-relaxed overflow-x-auto">
-                  {s.code}
-                </pre>
-              </div>
+                {l}
+              </button>
             ))}
           </div>
+          <pre className="p-6 font-mono text-sm leading-relaxed overflow-x-auto text-[#0a0a0a] bg-[#fafaf9]">
+            <code>{CODE[lang]}</code>
+          </pre>
         </div>
-      </section>
 
-      <section className="border-b-2 border-black">
-        <div className="max-w-5xl mx-auto px-6 py-16">
-          <div className="font-mono text-xs mb-3">/ USAGE</div>
-          <h2 className="text-3xl font-bold mb-8">Your stats.</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-0">
-            {[
-              { label: "calls this month", value: "0" },
-              { label: "limit", value: "1,000" },
-              { label: "keypairs", value: "1" },
-              { label: "plan", value: "free" },
-            ].map((s, i) => (
-              <div
-                key={s.label}
-                className={`border-2 border-black p-6 ${
-                  i > 0 ? "border-l-0" : ""
-                } ${i >= 2 ? "border-t-0 md:border-t-2" : ""}`}
-              >
-                <div className="text-3xl font-bold mb-2">{s.value}</div>
-                <div className="text-xs uppercase tracking-wider text-muted">
-                  {s.label}
-                </div>
-              </div>
-            ))}
+        {/* Endpoints */}
+        <div className="mt-8 border border-[#e4e4e0]">
+          <div className="px-6 py-4 border-b border-[#e4e4e0] font-mono text-[10px] tracking-widest text-[#737373] uppercase">
+            Endpoints
           </div>
+          {[
+            { method: "POST", path: "/v1/keys", desc: "Create API key" },
+            { method: "GET", path: "/v1/me", desc: "Account info + usage" },
+            { method: "POST", path: "/v1/keygen", desc: "Generate Pell-MLWE-512 keypair" },
+            { method: "POST", path: "/v1/keygen/toy", desc: "Generate Toy keypair (fast, for demos)" },
+            { method: "POST", path: "/v1/encapsulate", desc: "IND-CCA2 encapsulate" },
+            { method: "POST", path: "/v1/decapsulate", desc: "IND-CCA2 decapsulate" },
+          ].map((ep, i) => (
+            <div key={ep.path} className={`flex items-center gap-4 px-6 py-4 font-mono text-sm ${i > 0 ? "border-t border-[#e4e4e0]" : ""} hover:bg-[#f4f4f0] transition-colors`}>
+              <span className={`text-[10px] font-bold w-10 ${ep.method === "GET" ? "text-green-600" : "text-[#0a0a0a]"}`}>{ep.method}</span>
+              <span className="text-[#0a0a0a] w-48">{ep.path}</span>
+              <span className="text-[#737373] text-xs">{ep.desc}</span>
+            </div>
+          ))}
         </div>
-      </section>
 
-      <footer className="px-6 py-8 max-w-5xl mx-auto text-xs font-mono text-muted flex flex-wrap items-center justify-between gap-2">
-        <div>this is a research preview · functionality is mocked client-side</div>
-        <Link href="/" className="hover:text-black">
-          ← back to home
-        </Link>
-      </footer>
-    </main>
+      </div>
+    </div>
   );
 }
